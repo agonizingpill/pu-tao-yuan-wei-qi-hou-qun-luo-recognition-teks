@@ -1,0 +1,82 @@
+name: vineyard-microclimate
+x-python: &python
+  build: .
+  environment:
+    DATABASE_URL: postgresql://vineyard:${POSTGRES_PASSWORD:-vineyard-demo-db}@db:5432/vineyard
+    REDIS_URL: redis://redis:6379/0
+    JWT_SECRET: ${JWT_SECRET:-vineyard-local-demo-secret-change-before-sharing}
+    SEED_DEMO: ${SEED_DEMO:-true}
+    OMP_NUM_THREADS: '1'
+    OPENBLAS_NUM_THREADS: '1'
+  volumes:
+    - field-evidence:/evidence
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+services:
+  frontend:
+    build: frontend
+    container_name: ${COMPOSE_PROJECT_NAME:-vineyard-microclimate}-frontend
+    ports:
+      - '127.0.0.1:${FRONTEND_PORT:-18270}:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1/api/health]
+      interval: 4s
+      timeout: 3s
+      retries: 10
+  backend:
+    <<: *python
+    container_name: ${COMPOSE_PROJECT_NAME:-vineyard-microclimate}-backend
+    command: [uvicorn, backend.src.app:app, --host, '0.0.0.0', --port, '8000']
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-19270}:8000'
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 4s
+      timeout: 3s
+      retries: 15
+  worker:
+    <<: *python
+    container_name: ${COMPOSE_PROJECT_NAME:-vineyard-microclimate}-worker
+    command: [python, -m, backend.src.worker]
+    healthcheck:
+      test: [CMD, python, -c, "import time; from pathlib import Path; assert time.time()-Path('/tmp/field-heartbeat').stat().st_mtime < 20"]
+      interval: 4s
+      timeout: 3s
+      retries: 15
+  db:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-vineyard-microclimate}-db
+    environment:
+      POSTGRES_USER: vineyard
+      POSTGRES_DB: vineyard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vineyard-demo-db}
+    ports:
+      - '127.0.0.1:${DB_PORT:-17770}:5432'
+    volumes:
+      - field-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD, pg_isready, -h, '127.0.0.1', -U, vineyard, -d, vineyard]
+      interval: 4s
+      timeout: 3s
+      retries: 15
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-vineyard-microclimate}-redis
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - field-cache:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 4s
+      timeout: 3s
+      retries: 10
+volumes:
+  field-db:
+  field-cache:
+  field-evidence:
