@@ -103,6 +103,18 @@ form > label,form > .fields {width:100%}
 .bic i {height:10px;width:var(--size);background:var(--rule)}
 .bic li.selected i {background:var(--vine)}
 .bic b {text-align:right;font-variant-numeric:tabular-nums}
+.blind-form > label {flex:1 1 16rem}
+.blind-summary {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:.9rem 0 1.1rem}
+.blind-summary div {padding:.7rem .85rem;background:var(--sheet);border-top:2px solid var(--vine);display:grid;gap:.15rem}
+.blind-summary b {font:700 1.6rem var(--detail);font-variant-numeric:tabular-nums}
+.blind-summary span {font-size:.86rem;color:var(--muted)}
+.blind-summary p {grid-column:1/-1;font-size:.91rem;margin:0}
+.blind .provenance {margin-top:.35rem}
+.blind .provenance th {text-align:left;font-weight:600;white-space:nowrap;width:6rem}
+.blind tr.chosen-row td {background:oklch(92% .03 120)}
+.hit {display:inline-block;padding:.04rem .4rem;border:1px solid var(--rule);font-size:.82rem}
+.hit.yes {color:oklch(42% .09 150);border-color:oklch(55% .07 150)}
+.hit.no {color:oklch(48% .1 40);border-color:oklch(58% .08 40)}
 .evidence {margin-top:.5rem}
 .round-sheet,.harvest-slip {margin-top:1.3rem;padding:1.1rem 1.25rem 1.25rem;border-top:2px solid var(--vine);background:var(--sheet)}
 .round-sheet h3,.harvest-slip h3 {margin-top:.3rem;font-size:1.55rem}

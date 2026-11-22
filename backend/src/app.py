@@ -11,7 +11,7 @@ from redis.exceptions import RedisError
 
 from backend.scripts.seed_demo import seed
 from .operations_evidence import router as operations_evidence
-from . import clusters, fieldbook, irrigation, schemas
+from . import blind, clusters, fieldbook, irrigation, schemas
 from .auth import check_password, identity, issue, require
 from .db import EVIDENCE_DIR, QUEUE, connect, lock_ledger, migrate, redis_client
 from .domain import Role
@@ -151,6 +151,49 @@ def notify(run):
         except RedisError:
             logger.exception('Redis notification failed; run %s is persisted', run['id'])
     return run
+
+
+def notify_blind(test):
+    if test['status'] == 'queued':
+        try:
+            redis_client().rpush(QUEUE, f'blind:{test["id"]}')
+        except RedisError:
+            logger.exception('Redis notification failed; blind test %s is persisted', test['id'])
+    return test
+
+
+@app.get('/blind-tests')
+def blind_tests(_user=readable):
+    with connect() as db:
+        return blind.list_tests(db)
+
+
+@app.get('/blind-tests/options')
+def blind_test_options(_user=readable):
+    with connect() as db:
+        return {'runs': blind.window_options(db)}
+
+
+@app.get('/blind-tests/{test_id}')
+def blind_test_detail(test_id: int, _user=readable):
+    with connect() as db:
+        return blind.detail(db, test_id)
+
+
+@app.post('/blind-tests', status_code=202)
+def create_blind_test(data: schemas.BlindTestInput, user=editable):
+    with connect() as db:
+        lock_ledger(db)
+        test = blind.create(db, data.train_run_id, data.test_run_id, user['name'])
+    return notify_blind(test)
+
+
+@app.post('/blind-tests/{test_id}/retry', status_code=202)
+def retry_blind_test(test_id: int, user=editable):
+    with connect() as db:
+        lock_ledger(db)
+        test = blind.retry(db, test_id, user['name'])
+    return notify_blind(test)
 
 
 @app.post('/runs', status_code=202)

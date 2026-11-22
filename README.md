@@ -57,6 +57,10 @@ Docker 服务为 `frontend`、`backend`、`worker`、`db`、`redis`。数据库�
 
 连续三日每天应有昼夜各一笔。任一地块少于 5/6 笔时保留生效标签，记录缺口、原始读数快照与 SHA-256。每个地块以日均温、夜均温、日均相对湿度、夜均相对湿度四维表示。后台标准化后，用对角协方差 GaussianMixture 拟合 1–3 组，依据 `BIC = p log(n) − 2 log(L)` 的最小值选组数。固定随机种子 `1071`，`n_init=10`，`reg_covar=0.025`。按标准化中心的日夜温度之和减日夜湿度之和，从凉湿向暖干排序。保存候选 BIC、后验概率、原尺度中心、参数与输入指纹。相同已发布快照返回原批次，失败批次可按原快照重试。
 
+### 两群 / 三群盲测
+
+「微气候群落」页可对已生效的识别批次做盲测，判断多分一群是否让判群更准。选一个较早的已生效采样窗作训练，再选一个之后且不重叠的已生效窗口作后窗。训练窗单独拟合标准尺度与两群、三群两套模型；后窗只按冻结模型与训练尺度判群，不参与标准化或拟合。逐地块对照两套判群与后窗当时发布的标签，并比较两套命中率。缺读数或没有发布标签的地块单列，不计入分母。盲测只写独立的 `climate_blind_test` 结果，不发布或修改群落标签，也不触发排灌改排。失败批次可按创建时冻结的两窗原快照重试，不新增对照结果；识别页可查看两窗来源（批次号、起止日、快照指纹、原始文件）和逐地块对照。
+
 标签候选只在变更影响已排轮次时进入主管台。确认与标记待改排在同一事务提交。凉湿、温和、暖干对应预设的 20、35、50 分钟。改排保留最初版本引用，审计附前后版本、时段与时长。录入采收观察要求轮次已完灌、时间相符且每轮仅一笔。三类标签和滴灌时长是基于合成观测的演示规则。传感器和执行设备通过人员录入与登记协作。
 
 ## 代码职责
@@ -67,7 +71,8 @@ Docker 服务为 `frontend`、`backend`、`worker`、`db`、`redis`。数据库�
 | `backend/src/schemas.py`、`backend/src/domain.py` | API 输入与领域枚举 |
 | `backend/src/app.py`、`backend/src/auth.py`、`backend/src/db.py` | 路由、权限、中间件、连接和审计 |
 | `backend/src/fieldbook.py`、`clusters.py`、`irrigation.py` | 地块采样、标签发布及滴灌与采收事务 |
-| `backend/src/mixture.py`、`backend/src/worker.py` | GaussianMixture 拟合、Redis 通知、数据库恢复与文件证据 |
+| `backend/src/mixture.py`、`backend/src/worker.py` | GaussianMixture 拟合与盲测、Redis 通知、数据库恢复与文件证据 |
+| `backend/src/blind.py`、`backend/migrations/002_blind_test.sql` | 两群 / 三群盲测批次、来源快照与逐地块对照 |
 | `backend/scripts/seed_demo.py` | 幂等初始化演示数据 |
 | `frontend/src/api.js`、`main.js`、`ui.js` | 原生 ES modules 的 API、会话与页面状态、共享组件 |
 | `frontend/src/blocks.js`、`clusters.js`、`irrigation.js` | 勘测图、识别批次、排灌、采收表单和账簿 |

@@ -2,11 +2,28 @@ import logging
 import time
 from pathlib import Path
 
+from . import blind
 from .clusters import store_fit
 from .db import EVIDENCE_DIR, QUEUE, connect, event, lock_ledger, redis_client
 from .mixture import fit_profiles
 
 logger = logging.getLogger('vineyard.worker')
+
+
+def consume_blind_test():
+    with connect() as db:
+        lock_ledger(db)
+        row = blind.claim(db)
+        if not row:
+            return False
+        test_id = row['id']
+        try:
+            blind.store(db, test_id, row)
+        except Exception as exc:
+            logger.exception('Blind test %s failed', test_id)
+            reason = str(exc) if isinstance(exc, ValueError) else '盲测计算失败，可按原快照重试。'
+            blind.fail(db, test_id, reason)
+        return True
 
 
 def consume_one():
@@ -51,6 +68,7 @@ def main():
         try:
             client.blpop(QUEUE, timeout=2)
             # The persisted status recovers work even if a notification or worker is lost.
+            consume_blind_test()
             consume_one()
             heartbeat.touch()
         except Exception:

@@ -8,7 +8,7 @@ import {safe, field, formData, numeric, chinaTime} from './ui.js';
 const app = document.querySelector('#app');
 const routes = {blocks:'地块与采样', clusters:'微气候群落', irrigation:'灌溉轮次', harvest:'采收观察'};
 const currentPage = () => Object.hasOwn(routes, location.hash.slice(1)) ? location.hash.slice(1) : 'blocks';
-const state = {user:null, block:null, run:null, round:null, request:0, poll:null};
+const state = {user:null, block:null, run:null, round:null, blind:null, request:0, poll:null};
 
 function loginPage() {
   app.innerHTML = `<main class="login-wrap">
@@ -46,11 +46,13 @@ async function render(message='') {
       const history = block ? await api(`/blocks/${block.id}/samples`) : [];
       body = blockPage(blocks, block, history, editable);
     } else if (page === 'clusters') {
-      const [runs, labels] = await Promise.all([api('/runs'),api('/labels')]);
+      const [runs, labels, tests, options] = await Promise.all([api('/runs'),api('/labels'),api('/blind-tests'),api('/blind-tests/options')]);
       const id = runs.find(r => r.id === state.run)?.id || runs[0]?.id;
       const run = id ? await api(`/runs/${id}`) : null;
-      queued = run?.status === 'queued';
-      body = clusterPage(runs, run, labels, editable, supervisor);
+      const blindId = tests.find(t => t.id === state.blind)?.id || tests[0]?.id;
+      const blind = blindId ? await api(`/blind-tests/${blindId}`) : null;
+      queued = run?.status === 'queued' || blind?.status === 'queued';
+      body = clusterPage(runs, run, labels, tests, blind, options.runs, editable, supervisor);
     } else if (page === 'irrigation') {
       const [blocks, rounds] = await Promise.all([api('/blocks'),api('/rounds')]);
       body = irrigationPage(blocks, rounds, rounds.find(r => r.id === state.round), editable, supervisor);
@@ -68,7 +70,7 @@ async function render(message='') {
 
 function logout() {
   session.clear();
-  Object.assign(state, {user:null, block:null, run:null, round:null});
+  Object.assign(state, {user:null, block:null, run:null, round:null, blind:null});
   render();
 }
 
@@ -107,6 +109,14 @@ async function mutate(action, data, id) {
     case 'retry':
       await api(`/runs/${id}/retry`,{});
       return '原采样快照已重新入队。';
+    case 'blind': {
+      const test = await api('/blind-tests', numeric(data,'train_run_id','test_run_id'));
+      state.blind = test.id;
+      return `已排队盲测 #${test.id}，前窗拟合、后窗只判群。`;
+    }
+    case 'blind-retry':
+      await api(`/blind-tests/${id}/retry`,{});
+      return '盲测已按原批次快照重新入队。';
     case 'schedule': {
       const round = await api('/rounds', {...numeric(data,'block_id'), starts_at:chinaTime(data.starts_at)});
       state.round = round.id;
@@ -142,7 +152,7 @@ app.addEventListener('submit', async event => {
 app.addEventListener('click', async event => {
   const button = event.target.closest('button');
   if (!button) return;
-  const {block, round, demo, evidence, logout: exit, reload} = button.dataset;
+  const {block, round, demo, evidence, logout: exit, reload, blind} = button.dataset;
   if (demo) {
     const form = app.querySelector('form');
     form.elements.username.value = demo;
@@ -152,6 +162,7 @@ app.addEventListener('click', async event => {
   if (exit !== undefined) logout();
   if (block) {state.block = Number(block); await render();}
   if (round) {state.round = Number(round); await render();}
+  if (blind) {state.blind = Number(blind); await render();}
   if (reload !== undefined) await render();
   if (evidence) {
     try {
@@ -167,6 +178,7 @@ app.addEventListener('click', async event => {
 });
 app.addEventListener('change', event => {
   if (event.target.name === 'run') {state.run = Number(event.target.value); render();}
+  if (event.target.name === 'blind') {state.blind = Number(event.target.value); render();}
 });
 window.addEventListener('hashchange', () => {window.scrollTo(0,0); render();});
 window.addEventListener('vineyard:expired', logout);

@@ -51,6 +51,11 @@ class RunInput(Input):
     window_end: date
 
 
+class BlindTestInput(Input):
+    train_run_id: int = Field(gt=0)
+    test_run_id: int = Field(gt=0)
+
+
 class DecisionInput(Input):
     approve: bool
     reason: Narrative
